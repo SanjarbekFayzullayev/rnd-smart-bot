@@ -20,62 +20,87 @@ const getTodayDate = () => {
 
 // Check if a group is registered
 const isGroupRegistered = async (chatId) => {
-    const groupDoc = await db.collection('groups').doc(String(chatId)).get();
-    return groupDoc.exists && groupDoc.data()?.isActive;
+    try {
+        const groupDoc = await db.collection('groups').doc(String(chatId)).get();
+        return groupDoc.exists && groupDoc.data()?.isActive;
+    } catch (error) {
+        console.error('Error checking group registration:', error.message);
+        return false;
+    }
 };
 
 // Get tracked user for a group
 const getTrackedUser = async (chatId) => {
-    const groupDoc = await db.collection('groups').doc(String(chatId)).get();
-    if (groupDoc.exists) {
-        return groupDoc.data()?.trackedUserId;
+    try {
+        const groupDoc = await db.collection('groups').doc(String(chatId)).get();
+        if (groupDoc.exists) {
+            return groupDoc.data()?.trackedUserId;
+        }
+        return null;
+    } catch (error) {
+        console.error('Error getting tracked user:', error.message);
+        return null;
     }
-    return null;
 };
 
 // Get user's daily limit
 const getUserDailyLimit = async (userId) => {
-    const userDoc = await db.collection('users').doc(String(userId)).get();
-    if (userDoc.exists) {
-        return userDoc.data()?.dailyLimit || 10;
+    try {
+        const userDoc = await db.collection('users').doc(String(userId)).get();
+        if (userDoc.exists) {
+            return userDoc.data()?.dailyLimit || 10;
+        }
+        const settingsDoc = await db.collection('settings').doc('global').get();
+        return settingsDoc.exists ? settingsDoc.data()?.defaultDailyLimit || 10 : 10;
+    } catch (error) {
+        console.error('Error getting daily limit:', error.message);
+        return 10;
     }
-    const settingsDoc = await db.collection('settings').doc('global').get();
-    return settingsDoc.exists ? settingsDoc.data()?.defaultDailyLimit || 10 : 10;
 };
 
 // Get current count for user in group today
 const getCurrentCount = async (groupId, userId, date) => {
-    const statDoc = await db.collection('stats')
-        .doc(date)
-        .collection('groups')
-        .doc(String(groupId))
-        .get();
+    try {
+        const statDoc = await db.collection('stats')
+            .doc(date)
+            .collection('groups')
+            .doc(String(groupId))
+            .get();
 
-    if (statDoc.exists) {
-        return statDoc.data()?.count || 0;
+        if (statDoc.exists) {
+            return statDoc.data()?.count || 0;
+        }
+        return 0;
+    } catch (error) {
+        console.error('Error getting current count:', error.message);
+        return 0;
     }
-    return 0;
 };
 
 // Increment video count
 const incrementVideoCount = async (groupId, userId, userName) => {
-    const date = getTodayDate();
-    const statRef = db.collection('stats')
-        .doc(date)
-        .collection('groups')
-        .doc(String(groupId));
+    try {
+        const date = getTodayDate();
+        const statRef = db.collection('stats')
+            .doc(date)
+            .collection('groups')
+            .doc(String(groupId));
 
-    const statDoc = await statRef.get();
-    const currentCount = statDoc.exists ? statDoc.data()?.count || 0 : 0;
+        const statDoc = await statRef.get();
+        const currentCount = statDoc.exists ? statDoc.data()?.count || 0 : 0;
 
-    await statRef.set({
-        userId: String(userId),
-        userName: userName,
-        count: currentCount + 1,
-        lastUpdated: new Date(),
-    }, { merge: true });
+        await statRef.set({
+            userId: String(userId),
+            userName: userName,
+            count: currentCount + 1,
+            lastUpdated: new Date(),
+        }, { merge: true });
 
-    return currentCount + 1;
+        return currentCount + 1;
+    } catch (error) {
+        console.error('Error incrementing video count:', error.message);
+        return 0;
+    }
 };
 
 // ==================== TELEGRAM BOT HANDLERS ====================
