@@ -131,8 +131,8 @@ bot.on('video_note', async (ctx) => {
 
         // Check if this user is being tracked
         const trackedUserId = await getTrackedUser(chatId);
-        if (String(userId) !== String(trackedUserId)) {
-            console.log(`User ${userId} is not tracked in group ${chatId}`);
+        if (trackedUserId && String(userId).trim() !== String(trackedUserId).trim()) {
+            console.log(`User ${userId} is not the tracked user (${trackedUserId}) for group ${chatId}`);
             return;
         }
 
@@ -186,9 +186,20 @@ bot.command('status', async (ctx) => {
         const currentCount = await getCurrentCount(chatId, trackedUserId, date);
         const dailyLimit = await getUserDailyLimit(trackedUserId);
 
-        ctx.reply(`📊 Bugungi statistika:\n\n📅 Sana: ${date}\n📹 Video soni: ${currentCount}/${dailyLimit}`);
+        ctx.reply(
+            `📊 *Bugungi statistika:*\n\n` +
+            `📅 Sana: \`${date}\`\n` +
+            `📹 Video soni: *${currentCount}/${dailyLimit}*\n` +
+            `👤 Kuzatilayotgan User ID: \`${trackedUserId}\``,
+            { parse_mode: 'Markdown' }
+        );
     } else {
-        ctx.reply('❌ Bu guruh ro\'yxatdan o\'tmagan.');
+        ctx.reply(
+            `❌ *Hato:* Bu guruh ro'yxatdan o'tmagan.\n\n` +
+            `🆔 *Chat ID:* \`${chatId}\`\n` +
+            `💡 _Guruhni Flutter dashboard orqali qo'shing._`,
+            { parse_mode: 'Markdown' }
+        );
     }
 });
 
