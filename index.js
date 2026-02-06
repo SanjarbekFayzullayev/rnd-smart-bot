@@ -446,7 +446,118 @@ app.put('/api/settings', async (req, res) => {
     }
 });
 
+// ==================== SCHEDULES API ====================
+
+// Get all schedules
+app.get('/api/schedules', async (req, res) => {
+    try {
+        const snapshot = await db.collection('schedules').get();
+        const schedules = [];
+        snapshot.forEach(doc => {
+            schedules.push({ id: doc.id, ...doc.data() });
+        });
+        res.json(schedules);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Add new schedule
+app.post('/api/schedules', async (req, res) => {
+    try {
+        const { userId, userName, times, isActive } = req.body;
+        const docRef = await db.collection('schedules').add({
+            userId: String(userId),
+            userName,
+            times: times || [],
+            isActive: isActive !== false,
+            createdAt: new Date(),
+        });
+        res.json({ success: true, id: docRef.id });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Update schedule
+app.put('/api/schedules/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const updateData = req.body;
+        await db.collection('schedules').doc(id).update(updateData);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Delete schedule
+app.delete('/api/schedules/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        await db.collection('schedules').doc(id).delete();
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ==================== REMINDER HELPER ====================
+
+// Send reminder message to user via DM
+const sendReminderToUser = async (telegramId, userName) => {
+    const message =
+        `Assalomu alaykum, ${userName} ustoz.\n\n` +
+        `Iltimos, guruhingiz bo'yicha yo'qlama qiling.\n` +
+        `Shuningdek, ota-onalar guruhiga video xabar yuborish vaqti keldi.\n\n` +
+        `Agar bugun yaqin vaqtda darsingiz bo'lmasa,\n` +
+        `@SanjarbekFayzullayev ga murojaat qiling.`;
+
+    try {
+        await bot.telegram.sendMessage(telegramId, message);
+        console.log(`✅ Reminder sent to user ${telegramId} (${userName})`);
+        return true;
+    } catch (error) {
+        console.error(`❌ Failed to send reminder to ${telegramId}:`, error.message);
+        return false;
+    }
+};
+
+// Get current time in HH:MM format (Tashkent timezone)
+const getCurrentTime = () => {
+    const offset = parseInt(process.env.TIMEZONE_OFFSET || 5);
+    const now = new Date();
+    now.setHours(now.getUTCHours() + offset);
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+};
+
 // ==================== CRON JOBS ====================
+
+// Check schedules every minute and send reminders
+cron.schedule('* * * * *', async () => {
+    const currentTime = getCurrentTime();
+    console.log(`[${getTodayDate()} ${currentTime}] Checking schedules...`);
+
+    try {
+        const snapshot = await db.collection('schedules')
+            .where('isActive', '==', true)
+            .get();
+
+        for (const doc of snapshot.docs) {
+            const schedule = doc.data();
+            if (schedule.times && schedule.times.includes(currentTime)) {
+                console.log(`⏰ Time match! Sending reminder to ${schedule.userName}`);
+                await sendReminderToUser(schedule.userId, schedule.userName);
+            }
+        }
+    } catch (error) {
+        console.error('Error checking schedules:', error.message);
+    }
+}, {
+    timezone: 'Asia/Tashkent'
+});
 
 // Daily reset notification (optional - for logging purposes)
 cron.schedule('0 0 * * *', () => {
