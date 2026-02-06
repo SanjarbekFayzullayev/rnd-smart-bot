@@ -115,8 +115,8 @@ const incrementVideoCount = async (groupId, userId, userName) => {
 
 // ==================== TELEGRAM BOT HANDLERS ====================
 
-// Handle video_note messages
-bot.on('video_note', async (ctx) => {
+// Common handler for video messages
+const handleVideoMessage = async (ctx, videoType) => {
     try {
         const chatId = ctx.chat.id;
         const userId = ctx.from.id;
@@ -146,31 +146,39 @@ bot.on('video_note', async (ctx) => {
         // Check if limit reached
         if (currentCount >= dailyLimit) {
             console.log(`User ${userId} reached daily limit (${dailyLimit}) in group ${chatId}`);
-            // Optionally notify user
-            // await ctx.reply(`⚠️ Kunlik limit (${dailyLimit}) tugadi!`);
             return;
         }
 
         // Increment count
         const newCount = await incrementVideoCount(chatId, userId, userName);
-        console.log(`Video note counted! Group: ${chatId}, User: ${userId}, Count: ${newCount}/${dailyLimit}`);
+        console.log(`${videoType} counted! Group: ${chatId}, User: ${userId}, Count: ${newCount}/${dailyLimit}`);
 
     } catch (error) {
-        console.error('Error handling video_note:', error);
+        console.error(`Error handling ${videoType}:`, error);
     }
+};
+
+// Handle video_note messages (round videos)
+bot.on('video_note', async (ctx) => {
+    await handleVideoMessage(ctx, 'Video note');
+});
+
+// Handle regular video messages
+bot.on('video', async (ctx) => {
+    await handleVideoMessage(ctx, 'Video');
 });
 
 // Bot start command
 bot.command('start', (ctx) => {
     ctx.reply(
-        `🎬 *RND SMART BOOT* - Video Note Counter Bot\n\n` +
-        `Men guruhlardan video note (yumaloq video) xabarlarni hisoblash uchun yaratilganman.\n\n` +
+        `🎬 *RND SMART BOOT* - Video Counter Bot\n\n` +
+        `Men guruhlardan video xabarlarni hisoblash uchun yaratilganman.\n\n` +
         `📋 *Mavjud buyruqlar:*\n` +
         `/chatid - Guruh yoki chat ID sini olish\n` +
         `/myid - O'z Telegram ID ingizni olish\n` +
         `/info - To'liq ma'lumotlar (Chat + User)\n` +
         `/status - Bugungi statistikani ko'rish\n\n` +
-        `_Guruhga qo'shib, admin qiling va video note yuborishni boshlang!_`,
+        `_Guruhga qo'shib, admin qiling va video yuborishni boshlang!_`,
         { parse_mode: 'Markdown' }
     );
 });
