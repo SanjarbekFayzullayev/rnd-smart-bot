@@ -122,41 +122,56 @@ const handleVideoMessage = async (ctx, videoType) => {
         const userId = ctx.from.id;
         const userName = ctx.from.first_name + (ctx.from.last_name ? ' ' + ctx.from.last_name : '');
 
+        console.log(`\n📹 [${videoType}] Received from User: ${userId} (${userName}) in Chat: ${chatId}`);
+
         // Check if group is registered
         const registered = await isGroupRegistered(chatId);
         if (!registered) {
-            console.log(`Group ${chatId} is not registered`);
+            console.log(`❌ Group ${chatId} is NOT registered or NOT active`);
             return;
         }
+        console.log(`✅ Group ${chatId} is registered and active`);
 
         // Check if this user is being tracked
         const trackedUserId = await getTrackedUser(chatId);
-        if (trackedUserId && String(userId).trim() !== String(trackedUserId).trim()) {
-            console.log(`User ${userId} is not the tracked user (${trackedUserId}) for group ${chatId}`);
-            return;
+        console.log(`🔍 Tracked User ID for group: "${trackedUserId}" (type: ${typeof trackedUserId})`);
+        console.log(`🔍 Current User ID: "${userId}" (type: ${typeof userId})`);
+
+        // Only check if trackedUserId is set and not empty
+        if (trackedUserId && trackedUserId.trim() !== '') {
+            if (String(userId).trim() !== String(trackedUserId).trim()) {
+                console.log(`❌ User ${userId} is NOT the tracked user (${trackedUserId}) - Video IGNORED`);
+                return;
+            }
+            console.log(`✅ User ${userId} IS the tracked user`);
+        } else {
+            console.log(`⚠️ No tracked user set for group ${chatId} - counting ALL users`);
         }
 
         // Get user's daily limit
         const dailyLimit = await getUserDailyLimit(userId);
+        console.log(`📊 Daily limit for user ${userId}: ${dailyLimit}`);
 
         // Get current count
         const date = getTodayDate();
         const currentCount = await getCurrentCount(chatId, userId, date);
+        console.log(`📊 Current count: ${currentCount}/${dailyLimit}`);
 
         // Check if limit reached
         if (currentCount >= dailyLimit) {
-            console.log(`User ${userId} reached daily limit (${dailyLimit}) in group ${chatId}`);
+            console.log(`❌ User ${userId} reached daily limit (${dailyLimit}) - Video IGNORED`);
             return;
         }
 
         // Increment count
         const newCount = await incrementVideoCount(chatId, userId, userName);
-        console.log(`${videoType} counted! Group: ${chatId}, User: ${userId}, Count: ${newCount}/${dailyLimit}`);
+        console.log(`✅ ${videoType} COUNTED! Group: ${chatId}, User: ${userId}, Count: ${newCount}/${dailyLimit}`);
 
     } catch (error) {
-        console.error(`Error handling ${videoType}:`, error);
+        console.error(`❌ Error handling ${videoType}:`, error);
     }
 };
+
 
 // Handle video_note messages (round videos)
 bot.on('video_note', async (ctx) => {
@@ -518,7 +533,7 @@ app.delete('/api/schedules/:id', async (req, res) => {
 const sendReminderToUser = async (telegramId, userName) => {
     const message =
         `Assalomu alaykum, ${userName} ustoz.\n\n` +
-        `Iltimos, guruhingiz bo'yicha yo'qlama qiling.`+
+        `Iltimos, guruhingiz bo'yicha yo'qlama qiling.` +
         `Shuningdek, ota-onalar guruhiga video xabar yuborish vaqti keldi.\n\n` +
         `Agar bugun yaqin vaqtda darsingiz bo'lmasa,` +
         `@SanjarbekFayzullayev ga murojaat qiling.`;
