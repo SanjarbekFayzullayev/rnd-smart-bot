@@ -518,7 +518,7 @@ app.delete('/api/schedules/:id', async (req, res) => {
 const sendReminderToUser = async (telegramId, userName) => {
     const message =
         `Assalomu alaykum, ${userName} ustoz.\n\n` +
-        `Iltimos, guruhingiz bo'yicha yo'qlama qiling.`
+        `Iltimos, guruhingiz bo'yicha yo'qlama qiling.`+
         `Shuningdek, ota-onalar guruhiga video xabar yuborish vaqti keldi.\n\n` +
         `Agar bugun yaqin vaqtda darsingiz bo'lmasa,` +
         `@SanjarbekFayzullayev ga murojaat qiling.`;
