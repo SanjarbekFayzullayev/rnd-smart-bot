@@ -148,7 +148,7 @@ const handleVideoMessage = async (ctx, videoType) => {
             console.log(`⚠️ No tracked user set for group ${chatId} - counting ALL users`);
         }
 
-        // Get user's daily limit
+        // Get user's daily limit (for logging only, no limit enforced)
         const dailyLimit = await getUserDailyLimit(userId);
         console.log(`📊 Daily limit for user ${userId}: ${dailyLimit}`);
 
@@ -157,13 +157,7 @@ const handleVideoMessage = async (ctx, videoType) => {
         const currentCount = await getCurrentCount(chatId, userId, date);
         console.log(`📊 Current count: ${currentCount}/${dailyLimit}`);
 
-        // Check if limit reached
-        if (currentCount >= dailyLimit) {
-            console.log(`❌ User ${userId} reached daily limit (${dailyLimit}) - Video IGNORED`);
-            return;
-        }
-
-        // Increment count
+        // Increment count (no limit check - count all videos)
         const newCount = await incrementVideoCount(chatId, userId, userName);
         console.log(`✅ ${videoType} COUNTED! Group: ${chatId}, User: ${userId}, Count: ${newCount}/${dailyLimit}`);
 
@@ -184,102 +178,129 @@ bot.on('video', async (ctx) => {
 });
 
 // Bot start command
-bot.command('start', (ctx) => {
-    ctx.reply(
-        `🎬 *RND SMART BOOT* - Video Counter Bot\n\n` +
-        `Men guruhlardan video xabarlarni hisoblash uchun yaratilganman.\n\n` +
-        `📋 *Mavjud buyruqlar:*\n` +
-        `/chatid - Guruh yoki chat ID sini olish\n` +
-        `/myid - O'z Telegram ID ingizni olish\n` +
-        `/info - To'liq ma'lumotlar (Chat + User)\n` +
-        `/status - Bugungi statistikani ko'rish\n\n` +
-        `_Guruhga qo'shib, admin qiling va video yuborishni boshlang!_`,
-        { parse_mode: 'Markdown' }
-    );
-});
-
-// Bot status command
-bot.command('status', async (ctx) => {
-    const chatId = ctx.chat.id;
-    const registered = await isGroupRegistered(chatId);
-
-    if (registered) {
-        const date = getTodayDate();
-        const trackedUserId = await getTrackedUser(chatId);
-        const currentCount = await getCurrentCount(chatId, trackedUserId, date);
-        const dailyLimit = await getUserDailyLimit(trackedUserId);
-
-        ctx.reply(
-            `📊 *Bugungi statistika:*\n\n` +
-            `📅 Sana: \`${date}\`\n` +
-            `📹 Video soni: *${currentCount}/${dailyLimit}*\n` +
-            `👤 Kuzatilayotgan User ID: \`${trackedUserId}\``,
-            { parse_mode: 'Markdown' }
+bot.command('start', async (ctx) => {
+    try {
+        await ctx.reply(
+            `🎬 <b>RND SMART BOOT</b> - Video Counter Bot\n\n` +
+            `Men guruhlardan video xabarlarni hisoblash uchun yaratilganman.\n\n` +
+            `📋 <b>Mavjud buyruqlar:</b>\n` +
+            `/chatid - Guruh yoki chat ID sini olish\n` +
+            `/myid - O'z Telegram ID ingizni olish\n` +
+            `/info - To'liq ma'lumotlar (Chat + User)\n` +
+            `/status - Bugungi statistikani ko'rish\n\n` +
+            `<i>Guruhga qo'shib, admin qiling va video yuborishni boshlang!</i>`,
+            { parse_mode: 'HTML' }
         );
-    } else {
-        ctx.reply(
-            `❌ *Hato:* Bu guruh ro'yxatdan o'tmagan.\n\n` +
-            `🆔 *Chat ID:* \`${chatId}\`\n` +
-            `💡 _Guruhni Flutter dashboard orqali qo'shing._`,
-            { parse_mode: 'Markdown' }
-        );
+    } catch (error) {
+        console.error('❌ Error in /start command:', error.message);
     }
 });
 
-// Get Chat ID command
-bot.command('chatid', (ctx) => {
-    const chatId = ctx.chat.id;
-    const chatType = ctx.chat.type;
-    const chatTitle = ctx.chat.title || ctx.chat.first_name || 'Shaxsiy chat';
 
-    ctx.reply(
-        `📋 *Chat ma'lumotlari:*\n\n` +
-        `🆔 *Chat ID:* \`${chatId}\`\n` +
-        `📝 *Nomi:* ${chatTitle}\n` +
-        `📦 *Turi:* ${chatType}\n\n` +
-        `_Chat ID ni nusxalash uchun ustiga bosing_`,
-        { parse_mode: 'Markdown' }
-    );
+
+// Bot status command
+bot.command('status', async (ctx) => {
+    try {
+        const chatId = ctx.chat.id;
+        const registered = await isGroupRegistered(chatId);
+
+        if (registered) {
+            const date = getTodayDate();
+            const trackedUserId = await getTrackedUser(chatId);
+            const currentCount = await getCurrentCount(chatId, trackedUserId, date);
+            const dailyLimit = await getUserDailyLimit(trackedUserId);
+
+            await ctx.reply(
+                `📊 <b>Bugungi statistika:</b>\n\n` +
+                `📅 Sana: <code>${date}</code>\n` +
+                `📹 Video soni: <b>${currentCount}/${dailyLimit}</b>\n` +
+                `👤 Kuzatilayotgan User ID: <code>${trackedUserId}</code>`,
+                { parse_mode: 'HTML' }
+            );
+        } else {
+            await ctx.reply(
+                `❌ <b>Hato:</b> Bu guruh ro'yxatdan o'tmagan.\n\n` +
+                `🆔 <b>Chat ID:</b> <code>${chatId}</code>\n` +
+                `💡 <i>Guruhni Flutter dashboard orqali qo'shing.</i>`,
+                { parse_mode: 'HTML' }
+            );
+        }
+    } catch (error) {
+        console.error('❌ Error in /status command:', error.message);
+    }
 });
+
+
+// Get Chat ID command
+bot.command('chatid', async (ctx) => {
+    try {
+        const chatId = ctx.chat.id;
+        const chatType = ctx.chat.type;
+        const chatTitle = ctx.chat.title || ctx.chat.first_name || 'Shaxsiy chat';
+
+        await ctx.reply(
+            `📋 <b>Chat ma'lumotlari:</b>\n\n` +
+            `🆔 <b>Chat ID:</b> <code>${chatId}</code>\n` +
+            `📝 <b>Nomi:</b> ${chatTitle}\n` +
+            `📦 <b>Turi:</b> ${chatType}\n\n` +
+            `<i>Chat ID ni nusxalash uchun ustiga bosing</i>`,
+            { parse_mode: 'HTML' }
+        );
+    } catch (error) {
+        console.error('❌ Error in /chatid command:', error.message);
+    }
+});
+
 
 // Get User ID command
-bot.command('myid', (ctx) => {
-    const userId = ctx.from.id;
-    const userName = ctx.from.first_name + (ctx.from.last_name ? ' ' + ctx.from.last_name : '');
-    const username = ctx.from.username ? `@${ctx.from.username}` : 'Yo\'q';
+bot.command('myid', async (ctx) => {
+    try {
+        const userId = ctx.from.id;
+        const userName = ctx.from.first_name + (ctx.from.last_name ? ' ' + ctx.from.last_name : '');
+        const username = ctx.from.username ? `@${ctx.from.username}` : 'Yo\'q';
 
-    ctx.reply(
-        `👤 *Sizning ma'lumotlaringiz:*\n\n` +
-        `🆔 *User ID:* \`${userId}\`\n` +
-        `📝 *Ism:* ${userName}\n` +
-        `🔗 *Username:* ${username}\n\n` +
-        `_User ID ni nusxalash uchun ustiga bosing_`,
-        { parse_mode: 'Markdown' }
-    );
+        await ctx.reply(
+            `👤 <b>Sizning ma'lumotlaringiz:</b>\n\n` +
+            `🆔 <b>User ID:</b> <code>${userId}</code>\n` +
+            `📝 <b>Ism:</b> ${userName}\n` +
+            `🔗 <b>Username:</b> ${username}\n\n` +
+            `<i>User ID ni nusxalash uchun ustiga bosing</i>`,
+            { parse_mode: 'HTML' }
+        );
+    } catch (error) {
+        console.error('❌ Error in /myid command:', error.message);
+    }
 });
+
 
 // Get both Chat ID and User ID
-bot.command('info', (ctx) => {
-    const chatId = ctx.chat.id;
-    const chatType = ctx.chat.type;
-    const chatTitle = ctx.chat.title || ctx.chat.first_name || 'Shaxsiy chat';
-    const userId = ctx.from.id;
-    const userName = ctx.from.first_name + (ctx.from.last_name ? ' ' + ctx.from.last_name : '');
-    const username = ctx.from.username ? `@${ctx.from.username}` : 'Yo\'q';
+bot.command('info', async (ctx) => {
+    try {
+        const chatId = ctx.chat.id;
+        const chatType = ctx.chat.type;
+        const chatTitle = ctx.chat.title || ctx.chat.first_name || 'Shaxsiy chat';
+        const userId = ctx.from.id;
+        const userName = ctx.from.first_name + (ctx.from.last_name ? ' ' + ctx.from.last_name : '');
+        const username = ctx.from.username ? `@${ctx.from.username}` : 'Yo\'q';
 
-    ctx.reply(
-        `📊 *To'liq ma'lumotlar:*\n\n` +
-        `━━━ 💬 *Chat* ━━━\n` +
-        `🆔 Chat ID: \`${chatId}\`\n` +
-        `📝 Nomi: ${chatTitle}\n` +
-        `📦 Turi: ${chatType}\n\n` +
-        `━━━ 👤 *Foydalanuvchi* ━━━\n` +
-        `🆔 User ID: \`${userId}\`\n` +
-        `📝 Ism: ${userName}\n` +
-        `🔗 Username: ${username}`,
-        { parse_mode: 'Markdown' }
-    );
+        await ctx.reply(
+            `📊 <b>To'liq ma'lumotlar:</b>\n\n` +
+            `━━━ 💬 <b>Chat</b> ━━━\n` +
+            `🆔 Chat ID: <code>${chatId}</code>\n` +
+            `📝 Nomi: ${chatTitle}\n` +
+            `📦 Turi: ${chatType}\n\n` +
+            `━━━ 👤 <b>Foydalanuvchi</b> ━━━\n` +
+            `🆔 User ID: <code>${userId}</code>\n` +
+            `📝 Ism: ${userName}\n` +
+            `🔗 Username: ${username}`,
+            { parse_mode: 'HTML' }
+        );
+    } catch (error) {
+        console.error('❌ Error in /info command:', error.message);
+    }
 });
+
+
 
 // ==================== REST API ENDPOINTS ====================
 
