@@ -473,11 +473,12 @@ app.get('/api/schedules', async (req, res) => {
 // Add new schedule
 app.post('/api/schedules', async (req, res) => {
     try {
-        const { userId, userName, times, isActive } = req.body;
+        const { userId, userName, times, days, isActive } = req.body;
         const docRef = await db.collection('schedules').add({
             userId: String(userId),
             userName,
             times: times || [],
+            days: days || [1, 2, 3, 4, 5, 6, 7], // Default: all days (1=Monday to 7=Sunday)
             isActive: isActive !== false,
             createdAt: new Date(),
         });
@@ -541,12 +542,24 @@ const getCurrentTime = () => {
     return `${hours}:${minutes}`;
 };
 
+// Get current day of week (1=Monday to 7=Sunday)
+const getCurrentDayOfWeek = () => {
+    const offset = parseInt(process.env.TIMEZONE_OFFSET || 5);
+    const now = new Date();
+    now.setHours(now.getUTCHours() + offset);
+    // JavaScript: 0=Sunday, 1=Monday, ..., 6=Saturday
+    // Convert to: 1=Monday, 2=Tuesday, ..., 7=Sunday
+    const jsDay = now.getDay();
+    return jsDay === 0 ? 7 : jsDay;
+};
+
 // ==================== CRON JOBS ====================
 
 // Check schedules every minute and send reminders
 cron.schedule('* * * * *', async () => {
     const currentTime = getCurrentTime();
-    console.log(`[${getTodayDate()} ${currentTime}] Checking schedules...`);
+    const currentDay = getCurrentDayOfWeek();
+    console.log(`[${getTodayDate()} ${currentTime}] Day: ${currentDay} - Checking schedules...`);
 
     try {
         const snapshot = await db.collection('schedules')
@@ -555,8 +568,16 @@ cron.schedule('* * * * *', async () => {
 
         for (const doc of snapshot.docs) {
             const schedule = doc.data();
+            const scheduleDays = schedule.days || [1, 2, 3, 4, 5, 6, 7];
+
+            // Check if current day matches schedule days
+            if (!scheduleDays.includes(currentDay)) {
+                continue;
+            }
+
+            // Check if current time matches schedule times
             if (schedule.times && schedule.times.includes(currentTime)) {
-                console.log(`⏰ Time match! Sending reminder to ${schedule.userName}`);
+                console.log(`⏰ Day & Time match! Sending reminder to ${schedule.userName}`);
                 await sendReminderToUser(schedule.userId, schedule.userName);
             }
         }
