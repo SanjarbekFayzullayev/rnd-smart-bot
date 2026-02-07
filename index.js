@@ -593,33 +593,43 @@ const getCurrentDayOfWeek = () => {
 // ==================== CRON JOBS ====================
 
 // Check schedules every minute and send reminders
+// Check group schedules every minute and send reminders
 cron.schedule('* * * * *', async () => {
     const currentTime = getCurrentTime();
     const currentDay = getCurrentDayOfWeek();
-    console.log(`[${getTodayDate()} ${currentTime}] Day: ${currentDay} - Checking schedules...`);
+    console.log(`[${getTodayDate()} ${currentTime}] Day: ${currentDay} - Checking group schedules...`);
 
     try {
-        const snapshot = await db.collection('schedules')
+        // Get all active groups with schedules
+        const groupsSnapshot = await db.collection('groups')
             .where('isActive', '==', true)
             .get();
 
-        for (const doc of snapshot.docs) {
-            const schedule = doc.data();
-            const scheduleDays = schedule.days || [1, 2, 3, 4, 5, 6, 7];
+        for (const doc of groupsSnapshot.docs) {
+            const group = doc.data();
+            const groupDays = group.days || [1, 2, 3, 4, 5, 6, 7];
+            const groupTimes = group.times || [];
 
-            // Check if current day matches schedule days
-            if (!scheduleDays.includes(currentDay)) {
+            // Check if current day matches group schedule days
+            if (!groupDays.includes(currentDay)) {
                 continue;
             }
 
-            // Check if current time matches schedule times
-            if (schedule.times && schedule.times.includes(currentTime)) {
-                console.log(`⏰ Day & Time match! Sending reminder to ${schedule.userName}`);
-                await sendReminderToUser(schedule.userId, schedule.userName);
+            // Check if current time matches group schedule times
+            if (groupTimes.includes(currentTime)) {
+                // Get the tracked user from users collection
+                const userId = group.trackedUserId;
+                if (!userId) continue;
+
+                const userDoc = await db.collection('users').doc(String(userId)).get();
+                const userName = userDoc.exists ? userDoc.data()?.name : group.name;
+
+                console.log(`⏰ Day & Time match for group "${group.name}"! Sending reminder to user ${userId}`);
+                await sendReminderToUser(userId, userName);
             }
         }
     } catch (error) {
-        console.error('Error checking schedules:', error.message);
+        console.error('Error checking group schedules:', error.message);
     }
 }, {
     timezone: 'Asia/Tashkent'
