@@ -752,13 +752,18 @@ cron.schedule('* * * * *', async () => {
 
             console.log(`📢 Sending broadcast: "${message.substring(0, 20)}..." to ${userIds.length} users (Type: ${isOneTime ? 'One-time' : 'Scheduled'})`);
 
-            const keyboard = includeExcel ? {
-                reply_markup: {
-                    inline_keyboard: [
-                        [{ text: '📊 Statistika Excel yuklab olish', url: `${process.env.BASE_URL || 'http://localhost:3000'}/api/export/excel` }]
-                    ]
-                }
-            } : {};
+            let keyboard = {};
+            if (includeExcel && process.env.BASE_URL && !process.env.BASE_URL.includes('localhost')) {
+                keyboard = {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: '📊 Statistika Excel yuklab olish', url: `${process.env.BASE_URL}/api/export/excel` }]
+                        ]
+                    }
+                };
+            } else if (includeExcel) {
+                console.log('⚠️ Skipping Excel button: BASE_URL is missing or set to localhost (invalid for Telegram)');
+            }
 
             for (const userId of userIds) {
                 try {
