@@ -762,7 +762,7 @@ cron.schedule('* * * * *', async () => {
                     }
                 };
             } else if (includeExcel) {
-                console.log('⚠️ Skipping Excel button: BASE_URL is missing or set to localhost (invalid for Telegram)');
+                console.log(`⚠️ Skipping Excel button: BASE_URL is "${process.env.BASE_URL}" (valid URL required for Telegram)`);
             }
 
             for (const userId of userIds) {
