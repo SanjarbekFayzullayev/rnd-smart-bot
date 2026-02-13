@@ -23,8 +23,9 @@ app.use(express.json());
 const getTodayDate = () => {
     const offset = parseInt(process.env.TIMEZONE_OFFSET || 5);
     const now = new Date();
-    now.setHours(now.getUTCHours() + offset);
-    return now.toISOString().split('T')[0];
+    // Add offset hours to get the target time
+    const target = new Date(now.getTime() + (offset * 60 * 60 * 1000));
+    return target.toISOString().split('T')[0];
 };
 
 // Check if a group is registered
@@ -654,21 +655,22 @@ const sendReminderToUser = async (telegramId, userName) => {
 const getCurrentTime = () => {
     const offset = parseInt(process.env.TIMEZONE_OFFSET || 5);
     const now = new Date();
-    now.setHours(now.getUTCHours() + offset);
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
+    // Add offset hours to get the target time
+    const target = new Date(now.getTime() + (offset * 60 * 60 * 1000));
+    const hours = String(target.getUTCHours()).padStart(2, '0');
+    const minutes = String(target.getUTCMinutes()).padStart(2, '0');
     return `${hours}:${minutes}`;
 };
 
-// Get current day of week (1=Monday to 7=Sunday)
+// Get current day of week in target timezone (1=Monday to 7=Sunday)
 const getCurrentDayOfWeek = () => {
     const offset = parseInt(process.env.TIMEZONE_OFFSET || 5);
     const now = new Date();
-    now.setHours(now.getUTCHours() + offset);
-    // JavaScript: 0=Sunday, 1=Monday, ..., 6=Saturday
-    // Convert to: 1=Monday, 2=Tuesday, ..., 7=Sunday
-    const jsDay = now.getDay();
-    return jsDay === 0 ? 7 : jsDay;
+    // Add offset hours to get the target time
+    const target = new Date(now.getTime() + (offset * 60 * 60 * 1000));
+    // getUTCDay: 0=Sunday, 1=Monday, ..., 6=Saturday
+    const day = target.getUTCDay();
+    return day === 0 ? 7 : day;
 };
 
 // ==================== CRON JOBS ====================
@@ -716,7 +718,6 @@ cron.schedule('* * * * *', async () => {
     timezone: 'Asia/Tashkent'
 });
 
-// Check broadcasts every minute
 cron.schedule('* * * * *', async () => {
     const currentTime = getCurrentTime();
     const currentDay = getCurrentDayOfWeek();
@@ -726,6 +727,12 @@ cron.schedule('* * * * *', async () => {
         const broadcastsSnapshot = await db.collection('broadcasts')
             .where('isActive', '==', true)
             .get();
+
+        if (broadcastsSnapshot.empty) {
+            return;
+        }
+
+        console.log(`[${todayDate} ${currentTime}] Checking ${broadcastsSnapshot.size} active broadcasts...`);
 
         for (const doc of broadcastsSnapshot.docs) {
             const broadcast = doc.data();
@@ -738,6 +745,8 @@ cron.schedule('* * * * *', async () => {
             const shouldSendScheduled = !isOneTime && days.includes(currentDay) && scheduledTime === currentTime && lastSentDate !== todayDate;
 
             if (!shouldSendOneTime && !shouldSendScheduled) {
+                // Verbose log for debugging (can be removed later)
+                // console.log(`Skipping broadcast ${doc.id}: isOneTime=${isOneTime}, lastSent=${lastSentDate}, sched=${scheduledTime}, matchDay=${days.includes(currentDay)}`);
                 continue;
             }
 
@@ -754,8 +763,18 @@ cron.schedule('* * * * *', async () => {
             for (const userId of userIds) {
                 try {
                     await bot.telegram.sendMessage(userId, message, { parse_mode: 'HTML', ...keyboard });
+                    console.log(`✅ Sent to ${userId}`);
                 } catch (err) {
                     console.error(`❌ Failed to send broadcast to ${userId}:`, err.message);
+                    // If HTML parsing fails, try sending as plain text
+                    if (err.message.includes('can\'t parse entities')) {
+                        try {
+                            await bot.telegram.sendMessage(userId, message, { ...keyboard });
+                            console.log(`✅ Sent to ${userId} as plain text`);
+                        } catch (reErr) {
+                            console.error(`❌ Final fail to ${userId}:`, reErr.message);
+                        }
+                    }
                 }
             }
 
