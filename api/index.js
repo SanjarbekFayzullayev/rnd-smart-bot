@@ -43,18 +43,18 @@ const getTrackedUser = async (chatId) => {
     }
 };
 
-// Get user's daily limit
-const getUserDailyLimit = async (userId) => {
+// Get group's daily limit
+const getGroupDailyLimit = async (chatId) => {
     try {
-        const userDoc = await db.collection('users').doc(String(userId)).get();
-        if (userDoc.exists) {
-            return userDoc.data()?.dailyLimit || 10;
+        const groupDoc = await db.collection('groups').doc(String(chatId)).get();
+        if (groupDoc.exists) {
+            return groupDoc.data()?.dailyLimit || 4;
         }
         const settingsDoc = await db.collection('settings').doc('global').get();
-        return settingsDoc.exists ? settingsDoc.data()?.defaultDailyLimit || 10 : 10;
+        return settingsDoc.exists ? settingsDoc.data()?.defaultDailyLimit || 4 : 4;
     } catch (error) {
         console.error('Error getting daily limit:', error.message);
-        return 10;
+        return 4;
     }
 };
 
@@ -121,7 +121,7 @@ bot.on('video_note', async (ctx) => {
             return;
         }
 
-        const dailyLimit = await getUserDailyLimit(userId);
+        const dailyLimit = await getGroupDailyLimit(chatId);
         const date = getTodayDate();
         const currentCount = await getCurrentCount(chatId, userId, date);
 
@@ -159,7 +159,7 @@ bot.command('status', async (ctx) => {
         const date = getTodayDate();
         const trackedUserId = await getTrackedUser(chatId);
         const currentCount = await getCurrentCount(chatId, trackedUserId, date);
-        const dailyLimit = await getUserDailyLimit(trackedUserId);
+        const dailyLimit = await getGroupDailyLimit(chatId);
 
         ctx.reply(
             `📊 *Bugungi statistika:*\n\n` +
@@ -326,11 +326,10 @@ module.exports = async (req, res) => {
                 return res.status(200).json(users);
             }
             if (req.method === 'POST') {
-                const { telegramId, name, dailyLimit } = req.body;
+                const { telegramId, name } = req.body;
                 await db.collection('users').doc(String(telegramId)).set({
                     telegramId: String(telegramId),
                     name,
-                    dailyLimit: dailyLimit || 10,
                     createdAt: new Date(),
                 });
                 return res.status(200).json({ success: true, id: telegramId });
@@ -348,7 +347,7 @@ module.exports = async (req, res) => {
                 if (settingsDoc.exists) {
                     return res.status(200).json(settingsDoc.data());
                 }
-                return res.status(200).json({ defaultDailyLimit: 10, timezone: 'UTC+5' });
+                return res.status(200).json({ defaultDailyLimit: 4, timezone: 'UTC+5' });
             }
             if (req.method === 'PUT') {
                 await db.collection('settings').doc('global').set(req.body, { merge: true });

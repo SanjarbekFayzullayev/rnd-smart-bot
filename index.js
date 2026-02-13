@@ -4,6 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const cron = require('node-cron');
 const { initializeFirebase } = require('./firebase-config');
+const { generateStatsExcel } = require('./excel_helper');
 
 // Initialize Firebase
 const db = initializeFirebase();
@@ -51,20 +52,20 @@ const getTrackedUser = async (chatId) => {
     }
 };
 
-// Get user's daily limit
-const getUserDailyLimit = async (userId) => {
+// Get group's daily limit
+const getGroupDailyLimit = async (chatId) => {
     try {
-        const userDoc = await db.collection('users').doc(String(userId)).get();
-        if (userDoc.exists) {
-            return userDoc.data()?.dailyLimit || 10;
+        const groupDoc = await db.collection('groups').doc(String(chatId)).get();
+        if (groupDoc.exists) {
+            return groupDoc.data()?.dailyLimit || 4;
         }
 
         // Get default limit from settings
         const settingsDoc = await db.collection('settings').doc('global').get();
-        return settingsDoc.exists ? settingsDoc.data()?.defaultDailyLimit || 10 : 10;
+        return settingsDoc.exists ? settingsDoc.data()?.defaultDailyLimit || 4 : 4;
     } catch (error) {
         console.error('Error getting daily limit:', error.message);
-        return 10; // Default limit
+        return 4; // Default limit
     }
 };
 
@@ -148,9 +149,9 @@ const handleVideoMessage = async (ctx, videoType) => {
             console.log(`⚠️ No tracked user set for group ${chatId} - counting ALL users`);
         }
 
-        // Get user's daily limit (for logging only, no limit enforced)
-        const dailyLimit = await getUserDailyLimit(userId);
-        console.log(`📊 Daily limit for user ${userId}: ${dailyLimit}`);
+        // Get group's daily limit (for logging only, no limit enforced)
+        const dailyLimit = await getGroupDailyLimit(chatId);
+        console.log(`📊 Daily limit for group ${chatId}: ${dailyLimit}`);
 
         // Get current count
         const date = getTodayDate();
@@ -208,7 +209,7 @@ bot.command('status', async (ctx) => {
             const date = getTodayDate();
             const trackedUserId = await getTrackedUser(chatId);
             const currentCount = await getCurrentCount(chatId, trackedUserId, date);
-            const dailyLimit = await getUserDailyLimit(trackedUserId);
+            const dailyLimit = await getGroupDailyLimit(chatId);
 
             await ctx.reply(
                 `📊 <b>Bugungi statistika:</b>\n\n` +
@@ -375,11 +376,10 @@ app.get('/api/users', async (req, res) => {
 // Add new user
 app.post('/api/users', async (req, res) => {
     try {
-        const { telegramId, name, dailyLimit } = req.body;
+        const { telegramId, name } = req.body;
         await db.collection('users').doc(String(telegramId)).set({
             telegramId: String(telegramId),
             name,
-            dailyLimit: dailyLimit || 10,
             createdAt: new Date(),
         });
         res.json({ success: true, id: telegramId });
@@ -472,7 +472,7 @@ app.get('/api/settings', async (req, res) => {
         if (settingsDoc.exists) {
             res.json(settingsDoc.data());
         } else {
-            res.json({ defaultDailyLimit: 10, timezone: 'UTC+5' });
+            res.json({ defaultDailyLimit: 4, timezone: 'UTC+5' });
         }
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -544,6 +544,87 @@ app.delete('/api/schedules/:id', async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+// ==================== BROADCASTS API ====================
+
+// Get all broadcasts
+app.get('/api/broadcasts', async (req, res) => {
+    try {
+        const snapshot = await db.collection('broadcasts').get();
+        const broadcasts = [];
+        snapshot.forEach(doc => {
+            broadcasts.push({ id: doc.id, ...doc.data() });
+        });
+        res.json(broadcasts);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Add new broadcast
+app.post('/api/broadcasts', async (req, res) => {
+    try {
+        const broadcastData = req.body;
+        const docRef = await db.collection('broadcasts').add({
+            ...broadcastData,
+            createdAt: new Date(),
+        });
+        res.json({ success: true, id: docRef.id });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Update broadcast
+app.put('/api/broadcasts/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const updateData = req.body;
+        await db.collection('broadcasts').doc(id).update(updateData);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Delete broadcast
+app.delete('/api/broadcasts/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        await db.collection('broadcasts').doc(id).delete();
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ==================== EXCEL EXPORT API ====================
+
+app.get('/api/export/excel', async (req, res) => {
+    try {
+        console.log('📊 Generating Excel export...');
+        const date = getTodayDate();
+
+        // Fetch all necessary data
+        const statsSnapshot = await db.collection('stats').doc(date).collection('groups').get();
+        const groupsSnapshot = await db.collection('groups').get();
+        const usersSnapshot = await db.collection('users').get();
+
+        const stats = statsSnapshot.docs.map(doc => ({ groupId: doc.id, ...doc.data() }));
+        const groups = groupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const users = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        const buffer = await generateStatsExcel(stats, groups, users);
+
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename=Statistika_${date}.xlsx`);
+        res.send(buffer);
+        console.log('✅ Excel export sent!');
+    } catch (error) {
+        console.error('❌ Error exporting Excel:', error);
+        res.status(500).send('Server xatoligi');
     }
 });
 
@@ -630,6 +711,59 @@ cron.schedule('* * * * *', async () => {
         }
     } catch (error) {
         console.error('Error checking group schedules:', error.message);
+    }
+}, {
+    timezone: 'Asia/Tashkent'
+});
+
+// Check broadcasts every minute
+cron.schedule('* * * * *', async () => {
+    const currentTime = getCurrentTime();
+    const currentDay = getCurrentDayOfWeek();
+    const todayDate = getTodayDate();
+
+    try {
+        const broadcastsSnapshot = await db.collection('broadcasts')
+            .where('isActive', '==', true)
+            .get();
+
+        for (const doc of broadcastsSnapshot.docs) {
+            const broadcast = doc.data();
+            const { userIds, message, scheduledTime, days, includeExcel, lastSentDate, isOneTime } = broadcast;
+
+            // Check if it's a one-time message that hasn't been sent yet
+            const shouldSendOneTime = isOneTime && !lastSentDate;
+
+            // Check if it's a scheduled message for today and current time
+            const shouldSendScheduled = !isOneTime && days.includes(currentDay) && scheduledTime === currentTime && lastSentDate !== todayDate;
+
+            if (!shouldSendOneTime && !shouldSendScheduled) {
+                continue;
+            }
+
+            console.log(`📢 Sending broadcast: "${message.substring(0, 20)}..." to ${userIds.length} users (Type: ${isOneTime ? 'One-time' : 'Scheduled'})`);
+
+            const keyboard = includeExcel ? {
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: '📊 Statistika Excel yuklab olish', url: `${process.env.BASE_URL || 'http://localhost:3000'}/api/export/excel` }]
+                    ]
+                }
+            } : {};
+
+            for (const userId of userIds) {
+                try {
+                    await bot.telegram.sendMessage(userId, message, { parse_mode: 'HTML', ...keyboard });
+                } catch (err) {
+                    console.error(`❌ Failed to send broadcast to ${userId}:`, err.message);
+                }
+            }
+
+            // Mark as sent for today
+            await db.collection('broadcasts').doc(doc.id).update({ lastSentDate: todayDate });
+        }
+    } catch (error) {
+        console.error('Error in broadcast cron:', error.message);
     }
 }, {
     timezone: 'Asia/Tashkent'
